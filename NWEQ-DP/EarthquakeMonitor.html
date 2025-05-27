@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Earthquake Monitor - Real-time Visualization</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #e74c3c;
+            text-align: center;
+            margin-top: 0;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        #map { 
+            height: 600px; 
+            width: 100%; 
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            margin-bottom: 20px;
+        }
+        .controls-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .map-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .eq-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-left: auto;
+        }
+        .map-btn, .eq-btn {
+            padding: 8px 16px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .map-btn:hover, .eq-btn:hover {
+            background-color: #2980b9;
+        }
+        .eq-btn {
+            background-color: #e74c3c;
+        }
+        .eq-btn:hover {
+            background-color: #c0392b;
+        }
+        .eq-btn.active {
+            background-color: #c0392b;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.3) inset;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #7f8c8d;
+        }
+        .info-panel {
+            padding: 15px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            max-width: 300px;
+        }
+        .info-panel h4 {
+            margin: 0 0 10px;
+            color: #e74c3c;
+        }
+        .legend {
+            line-height: 18px;
+            color: #555;
+            background-color: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+        }
+        .legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
+            border-radius: 50%;
+        }
+        .earthquake-details {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            border-left: 4px solid #e74c3c;
+        }
+        .earthquake-details h3 {
+            margin-top: 0;
+            color: #e74c3c;
+        }
+        .earthquake-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        .earthquake-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+        .earthquake-item:hover {
+            background-color: #f0f0f0;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+            color: #7f8c8d;
+        }
+        .refresh-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .last-updated {
+            font-size: 0.9em;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Earthquake Monitor - Real-time Visualization</h1>
+        
+        <div class="controls-container">
+            <div class="map-controls">
+                <button class="map-btn" id="btnSatellite">Satellite View</button>
+                <button class="map-btn" id="btnStreet">Street View</button>
+                <button class="map-btn" id="btnTerrain">Terrain View</button>
+            </div>
+            
+            <div class="eq-controls">
+                <button class="eq-btn active" id="btnPast24Hours">Past 24 Hours</button>
+                <button class="eq-btn" id="btnPast7Days">Past 7 Days</button>
+                <button class="eq-btn" id="btnPast30Days">Past 30 Days</button>
+                <button class="eq-btn" id="btnRefresh">↻ Refresh Data</button>
+            </div>
+        </div>
+        
+        <div class="refresh-container">
+            <div class="magnitude-filter">
+                <label for="minMagnitude">Minimum Magnitude: </label>
+                <select id="minMagnitude">
+                    <option value="all">All</option>
+                    <option value="2.5">2.5+</option>
+                    <option value="4.5" selected>4.5+</option>
+                    <option value="6">6.0+</option>
+                </select>
+            </div>
+            <div class="last-updated" id="lastUpdated">Last updated: Never</div>
+        </div>
+        
+        <div id="map"></div>
+        
+        <div class="earthquake-details">
+            <h3>Recent Significant Earthquakes</h3>
+            <div id="earthquakeList" class="earthquake-list">
+                <div class="loading">Loading earthquake data...</div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            Data provided by USGS Earthquake Hazards Program
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        // Initialize the map and set its view to the world
+        var map = L.map('map', {
+            zoomControl: false,  // We'll add zoom control in a custom position
+            minZoom: 2,          // Prevent zooming out too far
+            maxBounds: [         // Restrict panning to reasonable bounds
+                [-90, -180],     // Southwest corner
+                [90, 180]        // Northeast corner
+            ]
+        }).setView([20, 0], 2);
+
+        // Add zoom control to the top-right corner
+        L.control.zoom({
+            position: 'topright'
+        }).addTo(map);
+        
+        // Define different map tile layers
+        var streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        });
+        
+        var satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 19,
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+        });
+        
+        var terrainLayer = L.tileLayer('https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}{r}.png', {
+            attribution: 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> &mdash; Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 18
+        });
+        
+        // Set the default layer
+        streetLayer.addTo(map);
+        
+        // Add button event listeners for map layers
+        document.getElementById('btnStreet').addEventListener('click', function() {
+            map.removeLayer(satelliteLayer);
+            map.removeLayer(terrainLayer);
+            streetLayer.addTo(map);
+        });
+        
+        document.getElementById('btnSatellite').addEventListener('click', function() {
+            map.removeLayer(streetLayer);
+            map.removeLayer(terrainLayer);
+            satelliteLayer.addTo(map);
+        });
+        
+        document.getElementById('btnTerrain').addEventListener('click', function() {
+            map.removeLayer(streetLayer);
+            map.removeLayer(satelliteLayer);
+            terrainLayer.addTo(map);
+        });
+        
+        // Add scale control
+        L.control.scale({
+            position: 'bottomleft',
+            imperial: true,
+            metric: true
+        }).addTo(map);
+        
+        // Create a layer group for earthquake markers
+        var earthquakes = L.layerGroup().addTo(map);
+        
+        // Variables to store current settings
+        var currentPeriod = '1day';
+        var currentMagnitude = '4.5';
+        
+        // Add event listeners for earthquake time period buttons
+        document.getElementById('btnPast24Hours').addEventListener('click', function() {
+            setActiveButton(this);
+            currentPeriod = '1day';
+            fetchEarthquakeData();
+        });
+        
+        document.getElementById('btnPast7Days').addEventListener('click', function() {
+            setActiveButton(this);
+            currentPeriod = '7days';
+            fetchEarthquakeData();
+        });
+        
+        document.getElementById('btnPast30Days').addEventListener('click', function() {
+            setActiveButton(this);
+            currentPeriod = '30days';
+            fetchEarthquakeData();
+        });
+        
+        document.getElementById('btnRefresh').addEventListener('click', function() {
+            fetchEarthquakeData();
+        });
+        
+        // Add event listener for magnitude filter
+        document.getElementById('minMagnitude').addEventListener('change', function() {
+            currentMagnitude = this.value;
+            fetchEarthquakeData();
+        });
+        
+        // Helper function to set active button
+        function setActiveButton(button) {
+            // Remove active class from all buttons
+            document.querySelectorAll('.eq-btn').forEach(function(btn) {
+                btn.classList.remove('active');
+            });
+            // Add active class to clicked button
+            button.classList.add('active');
+        }
+        
+        // Function to determine marker size based on magnitude
+        function getMarkerSize(magnitude) {
+            return magnitude * 5;
+        }
+        
+        // Function to determine marker color based on depth
+        function getMarkerColor(depth) {
+            return depth > 300 ? '#d73027' :
+                   depth > 100 ? '#fc8d59' :
+                   depth > 50 ? '#fee08b' :
+                   depth > 10 ? '#d9ef8b' :
+                              '#91cf60';
+        }
+        
+        // Function to create a marker for an earthquake
+        function createEarthquakeMarker(feature) {
+            var magnitude = feature.properties.mag;
+            var depth = feature.geometry.coordinates[2];
+            var latlng = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
+            
+            var markerOptions = {
+                radius: getMarkerSize(magnitude),
+                fillColor: getMarkerColor(depth),
+                color: '#000',
+                weight: 1,
+                opacity: 1,
+                fillOpacity: 0.8
+            };
+            
+            var marker = L.circleMarker(latlng, markerOptions);
+            
+            // Create popup content
+            var popupContent = `
+                <strong>Magnitude:</strong> ${magnitude}<br>
+                <strong>Location:</strong> ${feature.properties.place}<br>
+                <strong>Depth:</strong> ${depth} km<br>
+                <strong>Time:</strong> ${new Date(feature.properties.time).toLocaleString()}<br>
+                <a href="${feature.properties.url}" target="_blank">More details</a>
+            `;
+            
+            marker.bindPopup(popupContent);
+            
+            return marker;
+        }
+        
+        // Function to fetch earthquake data from USGS API
+        function fetchEarthquakeData() {
+            // Clear existing markers
+            earthquakes.clearLayers();
+            
+            // Update loading state
+            document.getElementById('earthquakeList').innerHTML = '<div class="loading">Loading earthquake data...</div>';
+            
+            // Build the API URL based on current settings
+            var magnitudeFilter = currentMagnitude === 'all' ? '' : `&minmagnitude=${currentMagnitude}`;
+            var apiUrl = `https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_${currentPeriod}.geojson${magnitudeFilter}`;
+            
+            // Fetch the data
+            fetch(apiUrl)
+                .then(response => response.json())
+                .then(data => {
+                    // Process the earthquake data
+                    processEarthquakeData(data);
+                    
+                    // Update last updated time
+                    document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleString();
+                })
+                .catch(error => {
+                    console.error('Error fetching earthquake data:', error);
+                    document.getElementById('earthquakeList').innerHTML = '<div class="loading">Error loading earthquake data. Please try again.</div>';
+                });
+        }
+        
+        // Function to process earthquake data and add to map
+        function processEarthquakeData(data) {
+            // Sort earthquakes by magnitude (descending)
+            var sortedFeatures = data.features.sort((a, b) => b.properties.mag - a.properties.mag);
+            
+            // Add markers to the map
+            sortedFeatures.forEach(feature => {
+                earthquakes.addLayer(createEarthquakeMarker(feature));
+            });
+            
+            // Update the earthquake list
+            updateEarthquakeList(sortedFeatures.slice(0, 10)); // Show top 10 earthquakes
+        }
+        
+        // Function to update the earthquake list
+        function updateEarthquakeList(features) {
+            var listHtml = '';
+            
+            if (features.length === 0) {
+                listHtml = '<div class="loading">No earthquakes found matching your criteria.</div>';
+            } else {
+                features.forEach(feature => {
+                    var magnitude = feature.properties.mag;
+                    var location = feature.properties.place || 'Unknown location';
+                    var time = new Date(feature.properties.time).toLocaleString();
+                    
+                    listHtml += `
+                        <div class="earthquake-item" data-id="${feature.id}">
+                            <strong>M${magnitude.toFixed(1)}</strong> - ${location}<br>
+                            <small>${time}</small>
+                        </div>
+                    `;
+                });
+            }
+            
+            document.getElementById('earthquakeList').innerHTML = listHtml;
+            
+            // Add click event listeners to earthquake items
+            document.querySelectorAll('.earthquake-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    var featureId = this.getAttribute('data-id');
+                    var feature = features.find(f => f.id === featureId);
+                    
+                    if (feature) {
+                        var latlng = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
+                        map.setView(latlng, 6);
+                        
+                        // Find and open the popup for this earthquake
+                        earthquakes.eachLayer(layer => {
+                            if (layer.getLatLng().lat === latlng[0] && layer.getLatLng().lng === latlng[1]) {
+                                layer.openPopup();
+                            }
+                        });
+                    }
+                });
+            });
+        }
+        
+        // Add a legend to the map
+        function addLegend() {
+            var legend = L.control({position: 'bottomright'});
+            
+            legend.onAdd = function(map) {
+                var div = L.DomUtil.create('div', 'legend');
+                var depths = [0, 10, 50, 100, 300];
+                var labels = [];
+                
+                div.innerHTML = '<h4>Earthquake Depth</h4>';
+                
+                // Loop through depth intervals and generate a label with a colored square for each interval
+                for (var i = 0; i < depths.length; i++) {
+                    div.innerHTML += 
+                        '<i style="background:' + getMarkerColor(depths[i] + 1) + '"></i> ' +
+                        (depths[i + 1] ? depths[i] + '&ndash;' + depths[i + 1] + ' km<br>' : depths[i] + '+ km');
+                }
+                
+                return div;
+            };
+            
+            legend.addTo(map);
+        }
+        
+        // Add info panel to the map
+        function addInfoPanel() {
+            var info = L.control({position: 'topright'});
+            
+            info.onAdd = function(map) {
+                var div = L.DomUtil.create('div', 'info-panel');
+                div.innerHTML = `
+                    <h4>Earthquake Monitor</h4>
+                    <p>Click on a circle to see details about the earthquake.</p>
+                    <p>Circle size indicates magnitude, and color indicates depth.</p>
+                `;
+                return div;
+            };
+            
+            info.addTo(map);
+        }
+        
+        // Initialize the application
+        function init() {
+            // Add legend and info panel
+            addLegend();
+            addInfoPanel();
+            
+            // Fetch initial earthquake data
+            fetchEarthquakeData();
+            
+            // Set up auto-refresh every 5 minutes
+            setInterval(fetchEarthquakeData, 5 * 60 * 1000);
+        }
+        
+        // Start the application when the page loads
+        window.onload = init;
+    </script>
+</body>
+</html>
